@@ -46,46 +46,73 @@ runs/<task-name>/
 
 Run artifacts are intentionally ignored by git because they can contain cookies, tokens, intranet URLs, request bodies, downloaded files, or business data.
 
-## Agent-Friendly Installation
+## Installation
 
-This repository is designed to work with Codex and with other AI agents such as OpenCode, Claude Code, Cursor-style agents, or local custom agents.
+This repository can be used by Codex, OpenCode, Claude Code, Cursor-style agents, or any local AI agent that can read a folder of instructions and run shell commands.
 
-There are three integration modes:
+The skill itself is the folder:
 
-- Native skill directory: install `api-replay-recorder` into the agent's skills directory.
-- Repository context: point the agent at `AGENTS.md` and `api-replay-recorder/SKILL.md`.
-- Script-only use: run the recorder/summarizer/replay scripts directly from this repository.
+```text
+api-replay-recorder/
+```
 
-Machine-readable install metadata is available in `agent-install.json`. Agent-facing instructions are available in `AGENTS.md`.
+The important entrypoint for an AI agent is:
 
-### Generic Install
+```text
+api-replay-recorder/SKILL.md
+```
 
-Use this when the target agent has a directory where reusable skills/instructions can be loaded:
+### For Any AI Agent
+
+Tell the agent to clone the repo, install dependencies from the repo root, and either load `api-replay-recorder/SKILL.md` directly or copy/symlink the `api-replay-recorder` folder into its own skill/instruction directory.
+
+Agent-facing install prompt:
+
+```text
+Install the EasySkill api-replay-recorder skill.
+
+1. Clone https://github.com/Jiegenglyu/EasySkill.git.
+2. Run npm install from the repository root.
+3. Use api-replay-recorder/SKILL.md as the skill entrypoint.
+4. If your environment has a skills directory, install the whole api-replay-recorder folder there by copy or symlink.
+5. Keep runs/, storage-state.json, network.jsonl, user-actions.jsonl, downloads/, cookies, tokens, CSRF values, and intranet data local. Do not commit or paste them into chat.
+```
+
+Manual install:
 
 ```bash
 git clone https://github.com/Jiegenglyu/EasySkill.git ~/.easyskill
-node ~/.easyskill/install.mjs --target-dir ~/.agent-skills
+npm --prefix ~/.easyskill install
 ```
 
-This creates:
-
-```text
-~/.agent-skills/api-replay-recorder -> ~/.easyskill/api-replay-recorder
-```
-
-Use another target directory if your agent expects one:
+If your agent supports a skill directory, install the skill folder into that directory:
 
 ```bash
-node ~/.easyskill/install.mjs --target-dir /path/to/your/agent/skills
+mkdir -p ~/.agent-skills
+ln -sfn ~/.easyskill/api-replay-recorder ~/.agent-skills/api-replay-recorder
 ```
 
-### Codex Install
+Replace `~/.agent-skills` with the path your agent uses. If your agent does not follow symlinks, copy the folder instead:
+
+```bash
+mkdir -p ~/.agent-skills
+cp -R ~/.easyskill/api-replay-recorder ~/.agent-skills/api-replay-recorder
+```
+
+For agents without a native skill directory, keep the repository cloned and ask the agent to read `~/.easyskill/api-replay-recorder/SKILL.md` before using the scripts.
+
+### For Codex
 
 For Codex, run:
 
 ```bash
 git clone https://github.com/Jiegenglyu/EasySkill.git "${CODEX_HOME:-$HOME/.codex}/easyskill"
-node "${CODEX_HOME:-$HOME/.codex}/easyskill/install.mjs" --codex
+npm --prefix "${CODEX_HOME:-$HOME/.codex}/easyskill" install
+
+mkdir -p "${CODEX_HOME:-$HOME/.codex}/skills"
+ln -sfn \
+  "${CODEX_HOME:-$HOME/.codex}/easyskill/api-replay-recorder" \
+  "${CODEX_HOME:-$HOME/.codex}/skills/api-replay-recorder"
 ```
 
 Restart Codex after installation. The skill should be available as:
@@ -94,25 +121,10 @@ Restart Codex after installation. The skill should be available as:
 $api-replay-recorder
 ```
 
-### OpenCode and Other Agents
-
-If the agent does not have a native skill system, give it this repository as context and ask it to read:
-
-```text
-AGENTS.md
-api-replay-recorder/SKILL.md
-```
-
-Example prompt for a generic agent:
-
-```text
-Use the EasySkill repository at ~/.easyskill. Read AGENTS.md and api-replay-recorder/SKILL.md. Record one human browser operation from <start-url>, save artifacts under runs/<task-name>, then summarize candidates.
-```
-
 Quick verification:
 
 ```bash
-node ~/.easyskill/install.mjs --dry-run --target-dir ~/.agent-skills
+test -f ~/.easyskill/api-replay-recorder/SKILL.md
 node --check ~/.easyskill/api-replay-recorder/scripts/human-record.mjs
 ```
 
@@ -123,7 +135,7 @@ git -C ~/.easyskill pull
 npm --prefix ~/.easyskill install
 ```
 
-The symlink install keeps the repository layout intact, so the skill can find its bundled scripts while the Node dependency is installed once at the repository root. Use `--copy` instead of a symlink only when your agent cannot follow symlinks.
+The symlink install keeps the repository layout intact, so the skill can find its bundled scripts while the Node dependency is installed once at the repository root.
 
 ## Usage
 
@@ -172,9 +184,6 @@ npm run replay -- \
 ## Repository Layout
 
 ```text
-AGENTS.md
-agent-install.json
-install.mjs
 api-replay-recorder/
   SKILL.md
   agents/openai.yaml
