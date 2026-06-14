@@ -1,6 +1,6 @@
 # Operation Recipe Format
 
-Use this file when writing `operation.recipe.json` after selecting captured API requests for a user operation. A recipe represents an executable operation, not just a single endpoint.
+Use this file when writing `operation.recipe.draft.json` after selecting captured API requests for a user operation. A recipe represents an executable operation, not just a single endpoint. Promote it to `operation.recipe.json` only after API replay succeeds and the user explicitly confirms that the replay result is correct.
 
 ## Required Shape
 
@@ -90,3 +90,4 @@ Use this file when writing `operation.recipe.json` after selecting captured API 
 - Use `output.type: "file"` for exports and downloads.
 - Include enough validation examples in the run directory to prove the recipe executes the same operation the UI performed.
 - Prefer replay with the browser's storage state or request context over manually copying cookies into code.
+- Treat `operation.recipe.draft.json` as an unverified hypothesis. Do not publish final API materials until `scripts/finalize-api-materials.mjs` records explicit user acceptance.

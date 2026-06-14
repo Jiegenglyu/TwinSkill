@@ -5,7 +5,7 @@
  *
  * Usage:
  *   node api-replay-recorder/scripts/run-bilibili-search.mjs \
- *     runs/bilibili-search/operation.recipe.json \
+ *     runs/bilibili-search/operation.recipe.draft.json \
  *     runs/bilibili-search/inputs.json \
  *     runs/bilibili-search
  */

@@ -19,9 +19,12 @@ const artifactNames = [
   "network.jsonl",
   "user-actions.jsonl",
   "candidates.json",
+  "operation.recipe.draft.json",
   "operation.recipe.json",
   "inputs.json",
   "validation.json",
+  "replay-acceptance.json",
+  "api-materials.json",
   "results.jsonl"
 ];
 

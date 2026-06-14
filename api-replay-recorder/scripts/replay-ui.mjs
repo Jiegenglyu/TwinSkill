@@ -125,7 +125,7 @@ const report = {
   startUrl,
   dryRun,
   mode: "best-effort-ui-replay",
-  warning: "UI replay reuses recorded page URLs, viewport sizes, and click coordinates. Use operation.recipe.json for deterministic API replay.",
+  warning: "UI replay reuses recorded page URLs, viewport sizes, and click coordinates. Use API replay from operation.recipe.draft.json for correctness, then finalize operation.recipe.json only after user confirmation.",
   records: []
 };
 

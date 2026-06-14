@@ -5,7 +5,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 const [, , recipeFile, inputsFile, runDirArg] = process.argv;
 
 if (!recipeFile || !inputsFile) {
-  console.error("Usage: node run-operation.mjs <operation.recipe.json> <inputs.json> [run-dir]");
+  console.error("Usage: node run-operation.mjs <operation.recipe.draft.json|operation.recipe.json> <inputs.json> [run-dir]");
   process.exit(2);
 }
 

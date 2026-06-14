@@ -16,7 +16,7 @@ This is not intended to be the final business skill. It is a pre-skill that copi
 - run analysis
 - generate a final report
 
-The key idea is to fake the human UI workflow once, then stop asking an LLM to repeatedly click around the browser. The recording produces artifacts that can be inspected, validated, replayed, or compiled into a deterministic operation.
+The key idea is to fake the human UI workflow once, then stop asking an LLM to repeatedly click around the browser. The recording produces artifacts that can be inspected, validated, replayed through the captured API, or compiled into a deterministic operation. Final API materials are produced only after the user explicitly confirms that the API replay result is correct.
 
 ## Workflow
 
@@ -24,9 +24,11 @@ The key idea is to fake the human UI workflow once, then stop asking an LLM to r
 2. Let the user complete one representative operation in the browser.
 3. Save local artifacts under `runs/<task-name>/`.
 4. Summarize the UI timeline and network traffic into operation candidates.
-5. Use `replay-ui.mjs` for a best-effort visual replay when the user wants to see the captured UI path again.
-6. Optionally create `operation.recipe.json` for deterministic API replay.
-7. Use the materials as input to a later full skill.
+5. Use `replay-ui.mjs` only for best-effort visual inspection when the user wants to see the captured UI path again.
+6. Create `operation.recipe.draft.json` for deterministic API replay.
+7. Run API replay and show the non-secret result summary to the user.
+8. After explicit user confirmation, promote the draft recipe and produce final API materials.
+9. Use the materials as input to a later full skill.
 
 Typical artifacts:
 
@@ -37,9 +39,12 @@ runs/<task-name>/
   network.jsonl
   user-actions.jsonl
   candidates.json
+  operation.recipe.draft.json
   operation.recipe.json
   inputs.json
   validation.json
+  replay-acceptance.json
+  api-materials.json
   results.jsonl
   ui-replay-report.json
   downloads/
@@ -175,15 +180,24 @@ Replay the visible UI path once from `user-actions.jsonl`:
 npm run replay-ui -- runs/export-report
 ```
 
-This is best-effort: it reuses recorded page URLs, viewport sizes, and click coordinates. It is useful for showing "what I did" once, but it is not a deterministic API replay.
+This is best-effort: it reuses recorded page URLs, viewport sizes, and click coordinates. It is useful for showing "what I did" once, but it is not a deterministic API replay and it does not authorize final API materials.
 
-Replay an extracted API operation:
+Replay an extracted API operation from a draft recipe:
 
 ```bash
 npm run replay -- \
-  runs/export-report/operation.recipe.json \
+  runs/export-report/operation.recipe.draft.json \
   runs/export-report/inputs.json \
   runs/export-report
+```
+
+After the user explicitly confirms that the API replay result is correct, finalize the API materials:
+
+```bash
+npm run finalize-api -- \
+  runs/export-report \
+  --user-confirmed \
+  --confirmed-by=user
 ```
 
 ## Design Principles
@@ -192,6 +206,8 @@ npm run replay -- \
 - Preserve raw materials locally; expose only compact summaries to the agent.
 - Keep secrets out of chat, git, prompts, and final answers.
 - Prefer deterministic scripts, schemas, and state machines over open-ended browser control.
+- Treat API replay as the correctness gate; UI replay is visual inspection only.
+- Require explicit user confirmation before promoting draft API materials to final API materials.
 - Treat generated artifacts as pre-skill evidence for a later complete workflow.
 
 ## Repository Layout
@@ -206,6 +222,7 @@ api-replay-recorder/
   scripts/summarize-network.mjs
   scripts/replay-ui.mjs
   scripts/run-operation.mjs
+  scripts/finalize-api-materials.mjs
 ```
 
 ## Status
