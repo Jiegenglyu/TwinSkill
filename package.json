@@ -1,0 +1,14 @@
+{
+  "name": "easyskill",
+  "version": "0.1.0",
+  "description": "Fake human UI operation recorder for generating reusable pre-skill materials from browser workflows.",
+  "private": true,
+  "scripts": {
+    "record": "node api-replay-recorder/scripts/human-record.mjs",
+    "summarize": "node api-replay-recorder/scripts/summarize-network.mjs",
+    "replay": "node api-replay-recorder/scripts/run-operation.mjs"
+  },
+  "dependencies": {
+    "playwright": "^1.60.0"
+  }
+}

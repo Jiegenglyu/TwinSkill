@@ -1,0 +1,19 @@
+.DS_Store
+node_modules/
+runs/
+
+# Local browser/auth artifacts. These can contain cookies, tokens, or business data.
+storage-state.json
+network.jsonl
+user-actions.jsonl
+candidates.json
+operation.recipe.json
+inputs.json
+validation.json
+results.jsonl
+downloads/
+screenshots/
+
+# Local environment files.
+.env
+.env.*

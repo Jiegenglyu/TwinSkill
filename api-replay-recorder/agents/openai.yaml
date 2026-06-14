@@ -1,0 +1,4 @@
+interface:
+  display_name: "Fake Human UI Recorder"
+  short_description: "Record and fake human browser operations into reusable pre-skill materials"
+  default_prompt: "Use $api-replay-recorder to record a human website operation once, preserve the UI actions and network materials, summarize the operation candidates, and optionally create a replay recipe for a later full skill."
