@@ -1,6 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync, appendFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
+import { validateRecipe } from "./validate-recipe.mjs";
 
 const [, , recipeFile, inputsFile, runDirArg] = process.argv;
 
@@ -15,6 +16,16 @@ const runDir = resolve(runDirArg || recipeDir);
 const recipe = JSON.parse(readFileSync(recipePath, "utf8"));
 const input = JSON.parse(readFileSync(resolve(inputsFile), "utf8"));
 const state = {};
+const validation = validateRecipe(recipe, { input });
+
+if (!validation.ok) {
+  console.error(JSON.stringify({ ok: false, stage: "preflight", ...validation }, null, 2));
+  process.exit(1);
+}
+
+if (validation.warnings.length || validation.notes.length) {
+  console.warn(JSON.stringify({ ok: true, stage: "preflight", warnings: validation.warnings, notes: validation.notes }, null, 2));
+}
 
 mkdirSync(runDir, { recursive: true });
 
@@ -73,6 +84,11 @@ function filenameFromDisposition(header) {
   return match ? decodeURIComponent(match[1] || match[2]) : null;
 }
 
+function toList(value) {
+  if (value == null) return [];
+  return Array.isArray(value) ? value : [value];
+}
+
 async function requestOnce(step) {
   const request = render(step.request);
   const method = request.method || "GET";
@@ -108,6 +124,20 @@ function assertExpected(step, result) {
   const expectedStatus = step.expect?.status;
   if (expectedStatus && result.response.status !== expectedStatus) {
     throw new Error(`${step.id} expected HTTP ${expectedStatus}, got ${result.response.status}`);
+  }
+  for (const expected of toList(step.expect?.contentTypeIncludes)) {
+    if (!result.contentType.toLowerCase().includes(String(expected).toLowerCase())) {
+      throw new Error(`${step.id} expected content-type to include ${expected}, got ${result.contentType || "(empty)"}`);
+    }
+  }
+  for (const rejected of toList(step.expect?.rejectContentTypes || step.output?.rejectContentTypes)) {
+    if (result.contentType.toLowerCase().includes(String(rejected).toLowerCase())) {
+      throw new Error(`${step.id} rejected content-type ${rejected}, got ${result.contentType}`);
+    }
+  }
+  const minBytes = step.expect?.minBytes ?? step.output?.minBytes;
+  if (minBytes != null && result.bytes.length < minBytes) {
+    throw new Error(`${step.id} expected at least ${minBytes} bytes, got ${result.bytes.length}`);
   }
 }
 
