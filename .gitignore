@@ -4,15 +4,24 @@ runs/
 
 # Local browser/auth artifacts. These can contain cookies, tokens, or business data.
 storage-state.json
+run-manifest.json
+environment.json
+preflight.json
 network.jsonl
 user-actions.jsonl
 candidates.json
+operation.recipe.draft.json
 operation.recipe.json
 inputs.json
 validation.json
+replay-acceptance.json
+api-materials.json
+skill-seed.json
+skill-brief.md
 results.jsonl
 downloads/
 screenshots/
+debug-snapshots/
 
 # Local environment files.
 .env

@@ -2,6 +2,8 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { chromium } from "playwright";
+import { saveDebugSnapshot } from "./debug-snapshot.mjs";
+import { STANDARD_LAUNCH_ARGS, standardContextOptions } from "./runtime-profile.mjs";
 
 const [, , runDirArg, ...flags] = process.argv;
 
@@ -78,8 +80,43 @@ function describeTarget(target = {}) {
     target.id ? `id=${target.id}` : null,
     target.name ? `name=${target.name}` : null,
     target.ariaLabel ? `aria=${target.ariaLabel}` : null,
+    target.placeholder ? `placeholder=${target.placeholder}` : null,
     target.text ? `text=${target.text}` : null
   ].filter(Boolean).join(" ");
+}
+
+function cssString(value) {
+  return JSON.stringify(String(value));
+}
+
+function locatorFromHint(page, hint) {
+  if (!hint?.kind) return null;
+  if (["data-testid", "data-test", "data-cy", "id", "name"].includes(hint.kind)) {
+    return page.locator(`[${hint.kind}=${cssString(hint.value)}]`);
+  }
+  if (hint.kind === "role" && hint.role && hint.name) {
+    return page.getByRole(hint.role, { name: hint.name });
+  }
+  if (hint.kind === "aria-label") return page.getByLabel(hint.value);
+  if (hint.kind === "placeholder") return page.getByPlaceholder(hint.value);
+  if (hint.kind === "text") return page.getByText(hint.value, { exact: false });
+  return null;
+}
+
+async function clickBySelectorHint(page, action, record) {
+  const hints = action.target?.selectorHints || [];
+  for (const hint of hints) {
+    const locator = locatorFromHint(page, hint);
+    if (!locator) continue;
+    const count = await locator.count().catch(() => 0);
+    record.selectorAttempts.push({ hint, count });
+    if (count !== 1) continue;
+    await locator.first().waitFor({ state: "visible", timeout: 2000 });
+    await locator.first().click({ timeout: 5000 });
+    record.selectorUsed = hint;
+    return true;
+  }
+  return false;
 }
 
 function firstStartUrl(session, actions) {
@@ -125,7 +162,7 @@ const report = {
   startUrl,
   dryRun,
   mode: "best-effort-ui-replay",
-  warning: "UI replay reuses recorded page URLs, viewport sizes, and click coordinates. Use API replay from operation.recipe.draft.json for correctness, then finalize operation.recipe.json only after user confirmation.",
+  warning: "UI replay is visual inspection only. It first tries unique recorded selector hints, then falls back to recorded coordinates. Use API replay from operation.recipe.draft.json for correctness, then finalize operation.recipe.json only after user confirmation.",
   records: []
 };
 
@@ -138,7 +175,8 @@ if (dryRun) {
       url: action.url || null,
       x: action.x ?? null,
       y: action.y ?? null,
-      target: describeTarget(action.target)
+      target: describeTarget(action.target),
+      selectorHints: action.target?.selectorHints || []
     });
   }
   writeFileSync(join(runDir, "ui-replay-report.json"), `${JSON.stringify(report, null, 2)}\n`);
@@ -148,9 +186,10 @@ if (dryRun) {
 
 mkdirSync(screenshotsDir, { recursive: true });
 
-const browser = await chromium.launch({ headless });
-const contextOptions = existsSync(storageStateFile) ? { storageState: storageStateFile } : {};
-const context = await browser.newContext(contextOptions);
+const browser = await chromium.launch({ headless, args: [...STANDARD_LAUNCH_ARGS] });
+const context = await browser.newContext(standardContextOptions(
+  existsSync(storageStateFile) ? { storageState: storageStateFile } : {}
+));
 const page = await context.newPage();
 
 try {
@@ -162,6 +201,7 @@ try {
       type: action.type,
       sourceUrl: action.url || null,
       target: describeTarget(action.target),
+      selectorAttempts: [],
       x: action.x ?? null,
       y: action.y ?? null,
       status: "pending"
@@ -182,13 +222,24 @@ try {
     }
 
     if (action.type === "ui.click") {
+      const clickedBySelector = await clickBySelectorHint(page, action, record).catch((error) => {
+        record.selectorError = error.message;
+        return false;
+      });
+      if (clickedBySelector) {
+        record.status = "clicked-by-selector";
+        await settle(page);
+        record.afterUrl = page.url();
+        continue;
+      }
+
       if (typeof action.x !== "number" || typeof action.y !== "number") {
         record.status = "skipped";
-        record.reason = "click action has no coordinates";
+        record.reason = "click action has no unique selector hint or coordinates";
         continue;
       }
       await page.mouse.click(action.x, action.y);
-      record.status = "clicked";
+      record.status = "clicked-by-coordinate";
       await settle(page);
       record.afterUrl = page.url();
       continue;
@@ -198,10 +249,9 @@ try {
     record.reason = "recording stores input/change shape but not raw values";
   }
 } catch (error) {
-  const screenshotPath = join(screenshotsDir, `ui-replay-failure-${Date.now()}.png`);
-  await page.screenshot({ path: screenshotPath, fullPage: true }).catch(() => {});
+  const snapshot = await saveDebugSnapshot(page, runDir, "ui-replay-failure", { error: error.message });
   report.error = error.message;
-  report.failureScreenshot = screenshotPath;
+  report.failureSnapshot = snapshot;
   writeFileSync(join(runDir, "ui-replay-report.json"), `${JSON.stringify(report, null, 2)}\n`);
   await browser.close();
   console.error(JSON.stringify(report, null, 2));

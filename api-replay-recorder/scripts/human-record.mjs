@@ -2,6 +2,12 @@ import { createWriteStream, existsSync, mkdirSync, writeFileSync } from "node:fs
 import { join, resolve } from "node:path";
 import { chromium } from "playwright";
 import { attachNetworkRecorder } from "./record-network.mjs";
+import {
+  STANDARD_LAUNCH_ARGS,
+  assertStandardEnvironment,
+  standardContextOptions,
+  writeEnvironmentSnapshot
+} from "./runtime-profile.mjs";
 
 const [, , startUrl, runDirArg = "runs/human-recording", ...flags] = process.argv;
 
@@ -25,7 +31,10 @@ const artifactNames = [
   "validation.json",
   "replay-acceptance.json",
   "api-materials.json",
-  "results.jsonl"
+  "results.jsonl",
+  "run-manifest.json",
+  "skill-seed.json",
+  "skill-brief.md"
 ];
 
 function hasRunArtifacts(directory) {
@@ -63,6 +72,46 @@ const pageNames = new WeakMap();
 const pages = [];
 let pageSequence = 0;
 const startedAt = new Date();
+const runId = `${startedAt.toISOString()
+  .replace(/\.\d{3}Z$/, "Z")
+  .replace(/[-:]/g, "")
+  .replace("T", "-")
+  .replace("Z", "")}-${runDir.split(/[\\/]/).pop()}`;
+
+function writeRunManifest(status, extra = {}) {
+  writeFileSync(
+    join(runDir, "run-manifest.json"),
+    `${JSON.stringify({
+      schemaVersion: 1,
+      runId,
+      status,
+      stage: status,
+      startUrl,
+      requestedRunDir,
+      runDir,
+      createdAt: startedAt.toISOString(),
+      updatedAt: new Date().toISOString(),
+      isolation: {
+        isolatedRunDirectory: runDir !== requestedRunDir,
+        appendMode: append
+      },
+      artifacts: {
+        session: "session.json",
+        network: "network.jsonl",
+        userActions: "user-actions.jsonl",
+        environment: "environment.json",
+        storageState: "storage-state.json",
+        downloads: "downloads/"
+      },
+      skillProduction: {
+        eligibleAfter: "api-replay-user-accepted",
+        seedFile: "skill-seed.json",
+        briefFile: "skill-brief.md"
+      },
+      ...extra
+    }, null, 2)}\n`
+  );
+}
 
 function writeAction(record) {
   actionStream.write(`${JSON.stringify({ ts: Date.now(), ...record })}\n`);
@@ -84,15 +133,32 @@ function installActionRecorder(context) {
     const describe = (element) => {
       if (!element || element.nodeType !== Node.ELEMENT_NODE) return {};
       const text = (element.innerText || element.textContent || "").replace(/\s+/g, " ").trim();
+      const attr = (name) => element.getAttribute(name);
+      const selectorHints = [];
+
+      for (const name of ["data-testid", "data-test", "data-cy", "id", "name"]) {
+        const value = attr(name);
+        if (value) selectorHints.push({ kind: name, value });
+      }
+      if (attr("role")) {
+        const accessibleName = attr("aria-label") || text.slice(0, 80);
+        selectorHints.push({ kind: "role", role: attr("role"), name: accessibleName || null });
+      }
+      if (attr("aria-label")) selectorHints.push({ kind: "aria-label", value: attr("aria-label") });
+      if (attr("placeholder")) selectorHints.push({ kind: "placeholder", value: attr("placeholder") });
+      if (text) selectorHints.push({ kind: "text", value: text.slice(0, 80) });
+
       return {
         tag: element.tagName?.toLowerCase(),
-        role: element.getAttribute("role") || null,
+        role: attr("role") || null,
         id: element.id || null,
-        name: element.getAttribute("name") || null,
-        type: element.getAttribute("type") || null,
-        ariaLabel: element.getAttribute("aria-label") || null,
-        title: element.getAttribute("title") || null,
-        text: text ? text.slice(0, 80) : null
+        name: attr("name") || null,
+        type: attr("type") || null,
+        ariaLabel: attr("aria-label") || null,
+        title: attr("title") || null,
+        placeholder: attr("placeholder") || null,
+        text: text ? text.slice(0, 80) : null,
+        selectorHints
       };
     };
 
@@ -192,10 +258,9 @@ function attachPageRecorders(page, pageName) {
   return recorder;
 }
 
-const browser = await chromium.launch({ headless });
-const context = await browser.newContext({
-  acceptDownloads: true
-});
+const browser = await chromium.launch({ headless, args: [...STANDARD_LAUNCH_ARGS] });
+const context = await browser.newContext(standardContextOptions());
+writeRunManifest("recording");
 
 await context.exposeBinding("__apiReplayRecordAction", async (source, payload) => {
   writeAction({
@@ -212,7 +277,15 @@ context.on("page", (page) => {
 const page = await context.newPage();
 const mainRecorder = attachPageRecorders(page, pageNames.get(page) || `page-${++pageSequence}`) || recorders[0];
 mainRecorder.mark("before_action", { mode: "human-driven-recording", startUrl });
+const initialEnvironment = await assertStandardEnvironment(page);
+writeEnvironmentSnapshot(runDir, initialEnvironment, {
+  checkedAt: new Date().toISOString(),
+  mode: "human-driven-recording"
+});
+writeAction({ type: "ui.environment", environment: initialEnvironment });
 await page.goto(startUrl, { waitUntil: "domcontentloaded" });
+const pageEnvironment = await assertStandardEnvironment(page);
+writeAction({ type: "ui.environment", environment: pageEnvironment });
 
 console.log(`Recording: ${startUrl}`);
 console.log(`Run directory: ${runDir}`);
@@ -251,11 +324,16 @@ writeFileSync(
   join(runDir, "session.json"),
   `${JSON.stringify({
     startUrl,
+    runId,
     requestedRunDir,
     runDir,
     startedAt: startedAt.toISOString(),
     endedAt: new Date().toISOString(),
     stopReason,
+    standardEnvironment: {
+      enforced: true,
+      environmentFile: "environment.json"
+    },
     endingPolicy: {
       explicitUserStopOnly: true,
       manualEnter: true,
@@ -269,6 +347,11 @@ writeFileSync(
 for (const recorder of recorders) recorder.close();
 actionStream.end();
 await browser.close();
+writeRunManifest("recorded", {
+  endedAt: new Date().toISOString(),
+  stopReason,
+  pages
+});
 
 console.log(`Saved recording artifacts to ${runDir}`);
 console.log(`Stop reason: ${stopReason}`);

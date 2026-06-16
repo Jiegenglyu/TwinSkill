@@ -1,4 +1,4 @@
 interface:
-  display_name: "Fake Human UI Recorder"
-  short_description: "Record browser flows for UI or API replay"
-  default_prompt: "Use $api-replay-recorder to record a human website operation once, preserve the UI actions and network materials, summarize operation candidates, use UI replay only to show the captured path, and create an API recipe for deterministic replay when needed."
+  display_name: "API Replay Recorder"
+  short_description: "Turn recorded workflows into Skill seeds"
+  default_prompt: "Use $api-replay-recorder to record one logged-in browser workflow as an isolated run, preserve selectors and network evidence, verify API replay, then produce skill-ready materials."
