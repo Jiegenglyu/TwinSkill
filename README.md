@@ -12,6 +12,8 @@
 
 Instead of asking an LLM agent to repeatedly click through the browser, TwinSkill records one demonstrated UI workflow, analyzes the runtime network traffic, recovers the useful API chain, verifies deterministic replay, and packages the result as skill-ready material. The goal is stable repeated execution with lower token cost and less fragile browser automation.
 
+![TwinSkill English demo](assets/twinskill-demo-en.png)
+
 ### Core Idea
 
 ```text
@@ -198,6 +200,8 @@ Prototype, TwinSkill 2.0 direction. The recorder, standard runtime, preflight, t
 **TwinSkill 的目标是：复制一次人的网页操作，把它变成稳定、可复用的 Agent API 执行链。**
 
 不要让 LLM Agent 每次都重新观察页面、思考点击、处理 UI 抖动。TwinSkill 记录一次人的 UI 操作，分析运行时网络流量，恢复对当前任务真正有用的 API 链路，验证确定性 API 重放，然后产出可生成 Skill 的材料。核心收益是稳定重复执行，并减少后续复用时的 token 消耗。
+
+![TwinSkill 中文演示图](assets/twinskill-demo-zh.png)
 
 ### 核心思路
 
